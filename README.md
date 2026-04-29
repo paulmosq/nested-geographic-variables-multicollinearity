@@ -39,10 +39,10 @@ nested-geographic-variables-multicollinearity/
 │   └── HousePrices.txt
 ├── analysis/
 │   └── solution.Rmd
-├── output/
-│   └── solution.html
-├── images/
-│   └── vif_comparison.png
+└── output/
+    ├── solution.html
+    └── solution.pdf
+    
 ```
 
 
