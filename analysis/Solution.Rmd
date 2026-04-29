@@ -1,7 +1,6 @@
 ---
 title: "Solving Perfect Multicollinearity with Nested Geographic Variables in R"
 author: "Paul Mosquera"
-date: "`r Sys.Date()`"
 output:
   html_document:
     toc: true
@@ -489,7 +488,7 @@ The code structure is identical to the Belgian case. Only the variable names cha
 
 ## Summary
 
-This tutorial documented a specific and recurring problem in applied regression analysis: perfect multicollinearity caused by nested geographic variables. The solution combines two techniques that individually are well known but whose joint application to resolve this specific problem is rarely documented clearly.
+This is a specific and recurring problem in applied regression analysis: perfect multicollinearity caused by nested geographic variables. The solution combines two techniques that individually are well known but whose joint application to resolve this specific problem is rarely documented clearly.
 
 The key contributions of this approach are choosing the BASE category with a principled criterion rather than arbitrarily, applying sum-to-zero contrasts to both hierarchical levels simultaneously, verifying the solution formally through VIF and rank analysis, and producing coefficients that are directly interpretable as deviations from the global mean.
 
