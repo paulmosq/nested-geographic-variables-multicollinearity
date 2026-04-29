@@ -62,13 +62,13 @@ rmarkdown::render(
 
 ## View the Analysis
 
-- Interactive HTML version: [GitHub Pages](https://paulmosq.github.io/nested-geographic-variables-multicollinearity/)
+- Interactive HTML version: [View Full Analysis (HTML)](https://paulmosq.github.io/nested-geographic-variables-multicollinearity/)
 - PDF version: available in `output/solution.pdf`
 
 ## Academic Context
 
-This solution was developed during the course **Applied Statistical Models I**
-at **ESPOL (Escuela Superior Politécnica del Litoral)**, Ecuador, as part of a
+This solution was developed during the course Applied Statistical Models I
+at ESPOL (Escuela Superior Politécnica del Litoral), Ecuador, as part of a
 group project modeling municipal housing prices in Belgium.
 
 The full analysis was a collaborative effort. This repository isolates and
