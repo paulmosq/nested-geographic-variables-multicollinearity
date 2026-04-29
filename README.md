@@ -33,7 +33,7 @@ The key assumption to verify before applying this solution is homoscedasticity a
 
 Use this solution when interpretability of fixed coefficients at both geographic levels is the primary goal and the sample is large enough for the Central Limit Theorem to protect inference. Consider multilevel models when the focus is on modeling within-group correlation or when group-level variance components are of direct interest.
 
-The analysis document includes a full assumptions check with Levene's test across regions and provinces, normality checks for the response variable, and model diagnostics, so you can evaluate applicability in your own context.
+The analysis document includes a full assumptions check with Levene's test across regions and provinces, normality checks for the response variable, and model diagnostics so you can evaluate applicability in your own context.
 
 ## Repository Structure
 
