@@ -11,7 +11,6 @@ output:
     highlight: tango
     number_sections: true
     code_folding: show
-    knit: (function(input, ...) { rmarkdown::render(input, output_dir = "../output") })
 ---
 
 ```{r setup, include=FALSE}
@@ -58,16 +57,18 @@ The design matrix $X$ looks like this conceptually:
 
 ```{r matrix-table, echo=FALSE}
 matrix_example <- data.frame(
-  Municipality   = c("Kortenaken", "Hamoir", "Hasselt"),
-  Vlaams_Gewest  = c(1, 0, 1),
-  Hainaut        = c(0, 0, 0),
-  Liege          = c(0, 1, 0),
-  Limburg        = c(0, 0, 1),
-  `...`          = c("...", "...", "...")
+  Municipality  = c("Kortenaken", "Hamoir", "Hasselt"),
+  Vlaams_Gewest = c(1, 0, 1),
+  Hainaut       = c(0, 0, 0),
+  Liege         = c(0, 1, 0),
+  Limburg       = c(0, 0, 1),
+  `...`         = c("...", "...", "...")
 )
 
-kable(matrix_example, align = "c", caption = "Conceptual design matrix X showing the redundancy of AdminArea") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+kable(matrix_example, align = "c",
+      caption = "Conceptual design matrix X showing the redundancy of AdminArea") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
 ```
 
 The AdminArea column is redundant. It carries no information that the province columns do not already contain. The matrix is singular and the model collapses.
@@ -98,12 +99,17 @@ hierarchy <- df |>
   count(AdminArea, Province) |>
   arrange(AdminArea, desc(n))
 
-p1 <- ggplot(hierarchy, aes(x = reorder(Province, n), y = n, fill = AdminArea,
-                             text = paste("Province:", Province, "<br>Region:", AdminArea, "<br>Municipalities:", n))) +
+p1 <- ggplot(hierarchy,
+             aes(x = reorder(Province, n), y = n, fill = AdminArea,
+                 text = paste("Province:", Province,
+                              "<br>Region:", AdminArea,
+                              "<br>Municipalities:", n))) +
   geom_col() +
   coord_flip() +
-  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3", "Waals_Gewest" = "#FF9800")) +
-  labs(title = "Municipalities per Province colored by Region", x = NULL, y = "Number of municipalities", fill = "Region") +
+  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3",
+                                "Waals_Gewest"  = "#FF9800")) +
+  labs(title = "Municipalities per Province colored by Region",
+       x = NULL, y = "Number of municipalities", fill = "Region") +
   theme_minimal(base_size = 12)
 
 ggplotly(p1, tooltip = "text")
@@ -112,8 +118,6 @@ ggplotly(p1, tooltip = "text")
 The color pattern is the key insight: every province bar is a single color. There is no province that is split between two regions. This perfect separation is precisely what causes the model to fail.
 
 ## Demonstrating the Failure
-
-Let us try to include both variables in a simple model and see what happens.
 
 ```{r demonstrate-failure}
 model_naive <- lm(med_price_house ~ AdminArea + Province, data = df)
@@ -124,15 +128,11 @@ Look carefully at the output. Several province coefficients appear as NA. This i
 
 # Diagnosis: Confirming the Problem
 
-Seeing NA coefficients in the output is already a clear symptom, but as an analyst you want to quantify the problem formally. There are two standard tools for this: the Variance Inflation Factor (VIF) and inspecting the rank of the design matrix.
-
 ## Variance Inflation Factor (VIF)
 
-The VIF measures how much the variance of a coefficient estimate is inflated due to its correlation with other predictors. For a predictor $X_j$, it is defined as:
+The VIF measures how much the variance of a coefficient estimate is inflated due to its correlation with other predictors:
 
 $$VIF_j = \frac{1}{1 - R^2_j}$$
-
-where $R^2_j$ is the R-squared from regressing $X_j$ on all other predictors. The interpretation is straightforward:
 
 | VIF Range | Interpretation |
 |---|---|
@@ -141,8 +141,6 @@ where $R^2_j$ is the R-squared from regressing $X_j$ on all other predictors. Th
 | VIF above 10 | Serious concern |
 | VIF approaching infinity | Perfect multicollinearity |
 
-When two variables are perfectly linearly dependent, $R^2_j$ approaches 1, which drives VIF toward infinity. In practice, R will throw an error rather than return an infinite value.
-
 ```{r vif-naive}
 tryCatch(
   car::vif(model_naive),
@@ -150,11 +148,7 @@ tryCatch(
 )
 ```
 
-The error confirms what we already suspected. The model is rank-deficient and VIF cannot even be computed because the mathematical prerequisites for the calculation are not met.
-
 ## Rank of the Design Matrix
-
-A more direct way to confirm perfect multicollinearity is to inspect the rank of the design matrix $X$ and compare it to the number of columns it should have.
 
 ```{r rank-check}
 X_naive <- model.matrix(~ AdminArea + Province, data = df)
@@ -165,6 +159,107 @@ cat("Rank deficiency:", ncol(X_naive) - qr(X_naive)$rank, "\n")
 ```
 
 The rank deficiency tells you exactly how many columns are redundant. One column can be expressed as a perfect linear combination of the others, confirming that AdminArea and Province cannot coexist in the same model without a structural fix.
+
+# Statistical Assumptions Check
+
+Before applying the solution, we verify whether the conditions for classical linear regression are reasonably met in this dataset. The goal here is not to validate a final predictive model but to establish whether this methodological solution is applicable in this context.
+
+It is important to clarify the modeling objective upfront: we are not building the most accurate model possible for Belgian housing prices. We are using a deliberately simple model with three predictors to demonstrate when and how this solution applies. This distinction matters for interpreting the assumption checks that follow.
+
+## Normality of the Response Variable
+
+Classical linear regression does not strictly require normality of the response variable. What matters is that the residuals are approximately normally distributed. However, inspecting the response distribution gives us useful information about potential issues.
+
+```{r response-distribution}
+df$log_price <- log(df$med_price_house)
+
+p_hist <- ggplot(df, aes(x = med_price_house)) +
+  geom_histogram(bins = 40, fill = "#2196F3", color = "white", alpha = 0.8) +
+  labs(title = "Distribution of med_price_house (original scale)",
+       x = "med_price_house", y = "Frequency") +
+  theme_minimal(base_size = 12)
+
+p_hist_log <- ggplot(df, aes(x = log_price)) +
+  geom_histogram(bins = 40, fill = "#FF9800", color = "white", alpha = 0.8) +
+  labs(title = "Distribution of log(med_price_house)",
+       x = "log(med_price_house)", y = "Frequency") +
+  theme_minimal(base_size = 12)
+
+ggplotly(p_hist)
+ggplotly(p_hist_log)
+```
+
+```{r qqplot-response}
+p_qq <- ggplot(df, aes(sample = med_price_house)) +
+  stat_qq(color = "#2196F3") +
+  stat_qq_line(color = "gray40") +
+  labs(title = "QQ-plot: med_price_house (original scale)") +
+  theme_minimal(base_size = 12)
+
+p_qq_log <- ggplot(df, aes(sample = log_price)) +
+  stat_qq(color = "#FF9800") +
+  stat_qq_line(color = "gray40") +
+  labs(title = "QQ-plot: log(med_price_house)") +
+  theme_minimal(base_size = 12)
+
+p_qq
+p_qq_log
+```
+
+The original scale shows moderate right skewness. The log transformation improves symmetry noticeably. Despite this, we keep the response in its original scale for a deliberate reason: our objective is to demonstrate the methodological solution with directly interpretable coefficients in monetary units. A coefficient of "Hainaut has prices 32 thousand below the global average" is immediately meaningful to any stakeholder. Under log transformation, coefficients would represent approximate percentage deviations, which are harder to communicate in applied contexts.
+
+With a sample of 566 observations, the Central Limit Theorem provides sufficient protection for the sampling distribution of the estimators to be approximately normal even when the response is moderately skewed. This makes OLS inference reasonably valid despite the departure from normality.
+
+## Homoscedasticity Across Geographic Groups
+
+This is the most critical assumption to verify for our specific solution. Since we are including two geographic levels in the same model, we need to assess whether the variance of housing prices is approximately constant across regions and provinces.
+
+We use Levene's test, which is robust to departures from normality and tests whether group variances are equal.
+
+```{r levene-region}
+cat("Levene's test for homoscedasticity across AdminArea:\n")
+leveneTest(med_price_house ~ AdminArea, data = df)
+```
+
+```{r levene-province}
+cat("Levene's test for homoscedasticity across Province:\n")
+leveneTest(med_price_house ~ Province, data = df)
+```
+
+```{r variance-by-group}
+var_by_region <- df |>
+  group_by(AdminArea) |>
+  summarise(
+    n        = n(),
+    mean     = round(mean(med_price_house), 2),
+    sd       = round(sd(med_price_house), 2),
+    variance = round(var(med_price_house), 2)
+  )
+
+kable(var_by_region,
+      caption = "Descriptive statistics of med_price_house by AdminArea") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
+```
+
+```{r variance-boxplot}
+p_box <- ggplot(df, aes(x = AdminArea, y = med_price_house, fill = AdminArea,
+                         text = paste("Region:", AdminArea,
+                                      "<br>Price:", med_price_house))) +
+  geom_boxplot(alpha = 0.7) +
+  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3",
+                                "Waals_Gewest"  = "#FF9800")) +
+  labs(title = "Housing price distribution by AdminArea",
+       x = NULL, y = "med_price_house") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+ggplotly(p_box, tooltip = "text")
+```
+
+If Levene's test rejects homoscedasticity, this does not invalidate the solution but it does inform how we interpret the results. OLS estimators remain unbiased under heteroscedasticity. What changes is that standard errors may be slightly underestimated, which affects the precision of hypothesis tests. For the purposes of this methodological demonstration, where the focus is on the structural fix rather than formal inference, this is an acceptable limitation.
+
+If formal inference were the primary goal, the appropriate response would be to either use heteroscedasticity-consistent standard errors (HC standard errors via the `sandwich` package) or consider a multilevel model with `lme4` that explicitly models group-level variance.
 
 # The Solution
 
@@ -181,8 +276,10 @@ base_provinces <- df |>
   slice_max(n, n = 1) |>
   ungroup()
 
-kable(base_provinces, caption = "Selected BASE province per region based on highest observation count") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+kable(base_provinces,
+      caption = "Selected BASE province per region based on highest observation count") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
 ```
 
 ```{r create-province2}
@@ -199,14 +296,15 @@ df$Province2 <- factor(df$Province2, levels = lv)
 
 df |> count(Province2) |> arrange(desc(n)) |>
   kable(caption = "Municipality count per Province2 after BASE recoding") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
 ```
 
 Notice that BASE now groups the most representative province from each region into a single reference category. This is what breaks the perfect linear dependence: BASE contains municipalities from both regions, so Province2 is no longer a perfect predictor of AdminArea.
 
 ## Why Does This Work?
 
-Before the recoding, the mapping between provinces and regions was perfectly rigid. Every province column in the design matrix pointed to exactly one region. After the recoding, the BASE category contains municipalities from both Vlaams_Gewest and Waals_Gewest, which means:
+After the recoding, the BASE category contains municipalities from both Vlaams_Gewest and Waals_Gewest, which means:
 
 $$\text{Province2}_i = \text{BASE} \not\Rightarrow \text{AdminArea}_i \text{ is determined}$$
 
@@ -217,12 +315,17 @@ hierarchy2 <- df |>
   count(AdminArea, Province2) |>
   arrange(AdminArea, desc(n))
 
-p2 <- ggplot(hierarchy2, aes(x = reorder(Province2, n), y = n, fill = AdminArea,
-                              text = paste("Province2:", Province2, "<br>Region:", AdminArea, "<br>Municipalities:", n))) +
+p2 <- ggplot(hierarchy2,
+             aes(x = reorder(Province2, n), y = n, fill = AdminArea,
+                 text = paste("Province2:", Province2,
+                              "<br>Region:", AdminArea,
+                              "<br>Municipalities:", n))) +
   geom_col() +
   coord_flip() +
-  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3", "Waals_Gewest" = "#FF9800")) +
-  labs(title = "Municipalities per Province2 after BASE recoding", x = NULL, y = "Number of municipalities", fill = "Region") +
+  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3",
+                                "Waals_Gewest"  = "#FF9800")) +
+  labs(title = "Municipalities per Province2 after BASE recoding",
+       x = NULL, y = "Number of municipalities", fill = "Region") +
   theme_minimal(base_size = 12)
 
 ggplotly(p2, tooltip = "text")
@@ -232,9 +335,7 @@ Compare this plot with the one in Section 1. The BASE bar is now split between t
 
 ## Step 2: Applying Sum-to-Zero Contrasts
 
-Breaking the perfect collinearity is necessary but not sufficient. We also need to choose how R encodes the categorical variables into dummy columns. The default in R is treatment coding, where one category is the reference and all others are compared against it. This works well for a single categorical variable, but when we have two related categorical variables in the same model, it can make the coefficients harder to interpret.
-
-Sum-to-zero contrasts, also known as deviation coding, offer a better alternative. Under this scheme, each coefficient represents the deviation of that category from the overall mean rather than the deviation from a single reference category. This means:
+Sum-to-zero contrasts, also known as deviation coding, make each coefficient represent the deviation of that category from the overall mean rather than the deviation from a single reference category:
 
 $$\sum_{k=1}^{K} \beta_k = 0$$
 
@@ -262,19 +363,18 @@ contrasts(df$Province2)
 
 ## Fitting the Model
 
-With the recoding and contrasts in place, we can now fit a model that includes both geographic levels simultaneously along with mean income as a continuous predictor.
+With the recoding and contrasts in place, we fit a deliberately simple model that includes both geographic levels simultaneously along with mean income as a continuous predictor. The simplicity is intentional: the goal is to demonstrate the methodological solution clearly, not to build an exhaustive predictive model.
 
 ```{r fit-model}
 df$Mean_income_c <- df$Mean_income - mean(df$Mean_income, na.rm = TRUE)
 
-model_solution <- lm(med_price_house ~ AdminArea + Province2 + Mean_income_c, data = df)
+model_solution <- lm(med_price_house ~ AdminArea + Province2 + Mean_income_c,
+                     data = df)
 
 summary(model_solution)
 ```
 
 # Verification: Did the Solution Work?
-
-The most direct way to verify that the solution worked is to compare the VIF values before and after applying the fix. Before, the model was rank-deficient and VIF could not even be computed. After, we expect VIF values in an acceptable range, confirming that the perfect linear dependence has been resolved.
 
 ## VIF After the Fix
 
@@ -284,7 +384,8 @@ vif_solution <- car::vif(model_solution)
 vif_solution |>
   as.data.frame() |>
   kable(caption = "GVIF values for the fixed model", digits = 4) |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE)
 ```
 
 ## Rank of the New Design Matrix
@@ -300,8 +401,6 @@ cat("Rank deficiency:", ncol(X_solution) - qr(X_solution)$rank, "\n")
 A rank deficiency of zero confirms that the design matrix now has full column rank. Every coefficient can be estimated without ambiguity.
 
 ## Visual Comparison of VIF Before and After
-
-To make the improvement immediately visible, we compute VIF values from a partial naive model that R can still estimate, and compare them against the fixed model.
 
 ```{r vif-comparison-plot}
 model_partial <- lm(med_price_house ~ Province + Mean_income_c, data = df)
@@ -323,24 +422,56 @@ vif_after_df <- data.frame(
 
 vif_combined <- bind_rows(vif_before_df, vif_after_df)
 
-p3 <- ggplot(vif_combined, aes(x = reorder(variable, vif), y = vif, fill = model,
-                                text = paste("Variable:", variable, "<br>GVIF:", round(vif, 3), "<br>Model:", model))) +
+p3 <- ggplot(vif_combined,
+             aes(x = reorder(variable, vif), y = vif, fill = model,
+                 text = paste("Variable:", variable,
+                              "<br>GVIF:", round(vif, 3),
+                              "<br>Model:", model))) +
   geom_col(position = "dodge") +
   geom_hline(yintercept = 2, linetype = "dashed", color = "gray40") +
   coord_flip() +
-  scale_fill_manual(values = c("Before fix" = "#EF5350", "After fix" = "#42A5F5")) +
-  labs(title = "VIF Comparison Before and After the Fix", x = NULL, y = "GVIF^(1/(2*Df))", fill = NULL) +
+  scale_fill_manual(values = c("Before fix" = "#EF5350",
+                                "After fix"  = "#42A5F5")) +
+  labs(title = "VIF Comparison Before and After the Fix",
+       x = NULL, y = "GVIF^(1/(2*Df))", fill = NULL) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "bottom")
 
 ggplotly(p3, tooltip = "text")
 ```
 
-All VIF values in the fixed model are well below the threshold of concern. The solution not only allows the model to run but also produces coefficient estimates with acceptable levels of collinearity.
+## Model Diagnostics
+
+Beyond VIF, we verify the classical regression assumptions on the fitted model. These diagnostics do not validate the solution itself, which was already confirmed by the rank analysis and VIF, but they tell us how much we can trust the coefficient estimates and standard errors for inference.
+
+```{r model-diagnostics}
+par(mfrow = c(2, 2), mar = c(4, 4, 2, 1))
+plot(model_solution, which = c(1, 2, 3, 5))
+par(mfrow = c(1, 1))
+```
+
+```{r residuals-by-group}
+df$residuals <- residuals(model_solution)
+
+p_resid <- ggplot(df, aes(x = AdminArea, y = residuals, fill = AdminArea,
+                           text = paste("Region:", AdminArea,
+                                        "<br>Residual:", round(residuals, 2)))) +
+  geom_boxplot(alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("Vlaams_Gewest" = "#2196F3",
+                                "Waals_Gewest"  = "#FF9800")) +
+  labs(title = "Residuals by AdminArea",
+       subtitle = "Systematic patterns here would indicate model misspecification",
+       x = NULL, y = "Residuals") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+ggplotly(p_resid, tooltip = "text")
+```
+
+If the residual spread differs substantially between regions, this confirms the heteroscedasticity detected by Levene's test. In that case, the coefficient estimates remain unbiased but standard errors should be interpreted with caution. For a methodological demonstration like this one, that is acceptable. For formal inference in a production setting, heteroscedasticity-consistent standard errors or a multilevel model would be more appropriate.
 
 # Interpretation: Reading Coefficients Under Sum-to-Zero Contrasts
-
-With sum-to-zero contrasts, the interpretation of coefficients changes compared to the default treatment coding. Understanding this difference is essential to extract meaningful conclusions from the model.
 
 ## The Intercept
 
@@ -351,13 +482,9 @@ intercept_val <- round(coef(model_solution)["(Intercept)"], 2)
 cat("Intercept (global mean housing price):", intercept_val, "thousands\n")
 ```
 
-This value is the estimated average housing price across all municipalities, averaged over all regions and provinces, when mean income is at its overall mean.
-
 ## Region and Province Coefficients
 
-Each coefficient for AdminArea and Province2 represents the deviation of that category from the overall mean. A positive coefficient means that category has prices above the global average and a negative coefficient means prices below.
-
-The coefficient for the implicit reference category, BASE in our case, is not shown directly in the output. It is recovered as minus the sum of all other coefficients for that variable:
+Each coefficient represents the deviation of that category from the overall mean. The implicit BASE coefficient is recovered as:
 
 $$\beta_{\text{BASE}} = -\sum_{k \neq \text{BASE}} \beta_k$$
 
@@ -369,8 +496,6 @@ cat("Implicit BASE coefficient:", round(beta_base, 4), "\n")
 
 ## Comparing Two Provinces Directly
 
-One of the most useful properties of sum-to-zero contrasts is that comparing any two provinces is straightforward. The expected price difference between province A and province B, holding everything else constant, is simply:
-
 $$\hat{y}_A - \hat{y}_B = \beta_A - \beta_B$$
 
 ```{r province-comparison}
@@ -381,21 +506,30 @@ comparison <- data.frame(
   Coefficient = round(all_province_coefs, 2)
 ) |> arrange(desc(Coefficient))
 
-kable(comparison, caption = "Province deviations from the global mean housing price", row.names = FALSE) |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |>
+kable(comparison,
+      caption = "Province deviations from the global mean housing price",
+      row.names = FALSE) |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) |>
   row_spec(which(comparison$Coefficient > 0), color = "#1565C0") |>
   row_spec(which(comparison$Coefficient < 0), color = "#B71C1C")
 ```
 
 ```{r comparison-plot}
-p4 <- ggplot(comparison, aes(x = reorder(Province, Coefficient), y = Coefficient, fill = Coefficient > 0,
-                              text = paste("Province:", Province, "<br>Deviation:", Coefficient, "thousands"))) +
+p4 <- ggplot(comparison,
+             aes(x = reorder(Province, Coefficient),
+                 y = Coefficient,
+                 fill = Coefficient > 0,
+                 text = paste("Province:", Province,
+                              "<br>Deviation:", Coefficient, "thousands"))) +
   geom_col() +
   geom_hline(yintercept = 0, linetype = "dashed", color = "gray40") +
   coord_flip() +
   scale_fill_manual(values = c("TRUE" = "#42A5F5", "FALSE" = "#EF5350"),
-                    labels = c("TRUE" = "Above average", "FALSE" = "Below average")) +
-  labs(title = "Province Deviations from the Overall Mean Housing Price", x = NULL, y = "Deviation from global mean (thousands)", fill = NULL) +
+                    labels = c("TRUE" = "Above average",
+                               "FALSE" = "Below average")) +
+  labs(title = "Province Deviations from the Overall Mean Housing Price",
+       x = NULL, y = "Deviation from global mean (thousands)", fill = NULL) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "bottom")
 
@@ -404,8 +538,6 @@ ggplotly(p4, tooltip = "text")
 
 ## A Concrete Example
 
-To make this tangible, let us compare two specific provinces: Vlaams_Brabant and Hainaut. These two provinces sit at opposite ends of the price spectrum in our dataset.
-
 ```{r concrete-example}
 beta_vb <- coef(model_solution)["Province2Vlaams_Brabant"]
 beta_ha <- coef(model_solution)["Province2Hainaut"]
@@ -413,83 +545,52 @@ diff    <- beta_vb - beta_ha
 
 cat("Vlaams_Brabant coefficient:", round(beta_vb, 2), "\n")
 cat("Hainaut coefficient:", round(beta_ha, 2), "\n")
-cat("Expected price difference (Vlaams_Brabant vs Hainaut):", round(diff, 2), "thousands\n")
+cat("Expected price difference (Vlaams_Brabant vs Hainaut):",
+    round(diff, 2), "thousands\n")
 ```
 
 A municipality in Vlaams_Brabant is expected to have a housing price approximately that many thousands higher than a comparable municipality in Hainaut, holding mean income constant. This is a direct and clean comparison that sum-to-zero contrasts make possible without any additional calculation.
 
-# Applicability: Where Else Does This Problem Appear?
+# Applicability and Limitations
 
-The problem documented in this tutorial is not specific to Belgium or to housing prices. It appears in any dataset where two categorical variables share a strict hierarchical relationship. The solution is always the same: create a BASE reference category that spans multiple groups at the upper level, and apply sum-to-zero contrasts to both variables.
+## When This Solution Is Appropriate
+
+This solution is appropriate when all of the following conditions hold. The analyst needs both hierarchical levels in the model simultaneously for interpretability purposes. The sample size is large enough for the Central Limit Theorem to protect inference under moderate violations of normality. The homoscedasticity assumption is at least approximately met, or formal inference is not the primary goal. The modeling framework is classical linear regression rather than a formal multilevel analysis.
+
+## When to Consider Alternatives
+
+If the primary goal is to model within-group correlation correctly, a multilevel model with `lme4` is more appropriate. If heteroscedasticity across groups is severe, heteroscedasticity-consistent standard errors via the `sandwich` package should be used alongside this solution. If the response variable requires transformation for valid inference, the log-transformed response can be used with the understanding that coefficients will represent approximate percentage deviations rather than absolute differences.
 
 ## Common Scenarios
 
-Latin America is particularly rich in nested geographic structures. In Ecuador, parishes are nested within cantons, cantons within provinces, and provinces within regions (Costa, Sierra, Amazonia, Insular). Any model that tries to include two of these levels simultaneously will face perfect multicollinearity. The same applies to municipalities nested within departments in Colombia and Peru, and to districts nested within cities in any urban study.
-
-Beyond geography, the same structure appears in education research when schools are nested within districts, in clinical studies when patients are nested within hospitals, and in business analytics when products are nested within categories.
+Latin America is particularly rich in nested geographic structures. In Ecuador, parishes are nested within cantons, cantons within provinces, and provinces within regions (Costa, Sierra, Amazonia, Insular). The same applies to municipalities nested within departments in Colombia and Peru, and to districts nested within cities in any urban study. Beyond geography, the same structure appears in education research when schools are nested within districts, in clinical studies when patients are nested within hospitals, and in business analytics when products are nested within categories.
 
 ## The General Recipe
 
-Regardless of the specific context, the solution always follows the same steps:
-
 ```{r recipe-table, echo=FALSE}
 recipe <- data.frame(
-  Step = 1:6,
+  Step = 1:7,
   Action = c(
     "Identify the two hierarchical levels that cause the problem",
+    "Check homoscedasticity across groups with Levene's test",
     "Choose a BASE category using a principled criterion such as the most frequent group at the lower level within each upper level group",
     "Recode the lower level variable replacing the chosen categories with BASE",
     "Set BASE as the last factor level",
     "Apply contr.sum to both variables",
-    "Verify with VIF that the rank deficiency is resolved"
+    "Verify with VIF and rank analysis that the deficiency is resolved"
   )
 )
 
-kable(recipe, caption = "General recipe for solving perfect multicollinearity with nested geographic variables") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = TRUE)
+kable(recipe,
+      caption = "General recipe for solving perfect multicollinearity with nested geographic variables") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = TRUE)
 ```
-
-## Ecuador Example
-
-To make this concrete for a Latin American context, imagine a dataset of Ecuadorian municipalities where you want to model a socioeconomic outcome using both Region and Province as predictors.
-
-```{r ecuador-example, eval=FALSE}
-# Example structure for Ecuador (not run, illustrative only)
-# Region: Costa, Sierra, Amazonia
-# Province: Guayas, Pichincha, Manabi, Azuay, etc.
-
-base_ecuador <- data_ecuador |>
-  count(Region, Province) |>
-  group_by(Region) |>
-  slice_max(n, n = 1) |>
-  ungroup()
-
-data_ecuador$Province2 <- as.character(data_ecuador$Province)
-
-for (i in seq_len(nrow(base_ecuador))) {
-  region <- base_ecuador$Region[i]
-  prov   <- base_ecuador$Province[i]
-  data_ecuador$Province2[data_ecuador$Region == region & data_ecuador$Province == prov] <- "BASE"
-}
-
-lv <- c(setdiff(unique(data_ecuador$Province2), "BASE"), "BASE")
-data_ecuador$Province2 <- factor(data_ecuador$Province2, levels = lv)
-
-kR <- nlevels(data_ecuador$Region)
-kP <- nlevels(data_ecuador$Province2)
-
-contrasts(data_ecuador$Region)    <- contr.sum(kR)
-contrasts(data_ecuador$Province2) <- contr.sum(kP)
-
-model_ecuador <- lm(outcome ~ Region + Province2 + predictor_c, data = data_ecuador)
-```
-
-The code structure is identical to the Belgian case. Only the variable names change. This is the power of a generalizable methodological solution.
 
 ## Summary
 
-This is a specific and recurring problem in applied regression analysis: perfect multicollinearity caused by nested geographic variables. The solution combines two techniques that individually are well known but whose joint application to resolve this specific problem is rarely documented clearly.
+This document demonstrates a methodological solution for a specific and recurring problem in applied regression: perfect multicollinearity caused by nested geographic variables. The solution is statistically valid under classical linear regression assumptions and is especially valuable when interpretability of fixed coefficients at both geographic levels is the primary goal.
 
-The key contributions of this approach are choosing the BASE category with a principled criterion rather than arbitrarily, applying sum-to-zero contrasts to both hierarchical levels simultaneously, verifying the solution formally through VIF and rank analysis, and producing coefficients that are directly interpretable as deviations from the global mean.
+The approach is not a replacement for multilevel models. It is a practical and accessible alternative when the analyst works within a classical regression framework and needs both geographic levels in the model with directly interpretable coefficients. Understanding when to apply it, and when its assumptions are sufficiently met, is the core statistical competency this document aims to build.
 
-This solution was developed during the course Applied Statistical Models I at ESPOL, Ecuador, as part of a group project. The methodological contribution documented here was developed independently by the author.
+This solution was developed during the course Applied Statistical Models I at ESPOL, Ecuador, as part of a group project. The methodological contribution documented here was developed independently by the me.
