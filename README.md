@@ -51,12 +51,19 @@ nested-geographic-variables-multicollinearity/
 1. Clone this repository
 2. Open `analysis/solution.Rmd` in RStudio
 3. Place `HousePrices.txt` in the `data/` folder
-4. Click **Knit** — the output will render to `output/solution.html`
+4. Run the following in the RStudio console:
 
-Required R packages:
 ```r
-install.packages(c("tidyverse", "car", "here"))
+rmarkdown::render(
+  here::here("analysis", "solution.Rmd"),
+  output_dir = here::here("output")
+)
 ```
+
+## View the Analysis
+
+- Interactive HTML version: [GitHub Pages](https://paulmosq.github.io/nested-geographic-variables-multicollinearity/)
+- PDF version: available in `output/solution.pdf`
 
 ## Academic Context
 

@@ -11,9 +11,7 @@ output:
     highlight: tango
     number_sections: true
     code_folding: show
-  pdf_document:
-    toc: true
-    number_sections: true
+    knit: (function(input, ...) { rmarkdown::render(input, output_dir = "../output") })
 ---
 
 ```{r setup, include=FALSE}
